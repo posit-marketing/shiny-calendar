@@ -1,0 +1,146 @@
+---
+title: "Shiny Calendar Data Pull"
+output: html_document
+---
+
+```{r}
+#| message: false
+library(reticulate)
+library(jsonlite)
+library(purrr)
+library(curl)
+library(tibble)
+library(dplyr)
+library(tidyr)
+
+api_key <- Sys.getenv("JIRA_API_KEY")
+
+board <-
+  pins::board_connect(
+    auth = "manual",
+    server = Sys.getenv("CONNECT_SERVER"),
+    key = Sys.getenv("CONNECT_API_KEY")
+  )
+```
+
+```{python}
+#| warning: false
+import requests
+from requests.auth import HTTPBasicAuth
+import json
+
+username = "ivelasq@gmail.com"
+api_key = r.api_key
+
+social_url = "https://ivelasq.atlassian.net/rest/api/3/search?jql=project%20=%20KAN%20AND%20text%20~%20%22\%22social\%22%22"
+blog_url = "https://ivelasq.atlassian.net/rest/api/3/search?jql=project%20=%20KAN%20AND%20text%20~%20%22\%22blog\%22%22"
+
+def get_response_from_url(url, username, api_key):
+    auth = HTTPBasicAuth(username, api_key)
+
+    headers = {
+        "Accept": "application/json"
+    }
+
+    response = requests.request("GET", url, headers=headers, auth=auth)
+
+    if response.status_code == 200:
+        results = json.dumps(json.loads(response.text), sort_keys=True, indent=4, separators=(",", ": "))
+        return results
+    else:
+        return None
+      
+social_results = get_response_from_url(social_url, username, api_key)
+blog_results = get_response_from_url(blog_url, username, api_key)
+```
+
+```{r}
+results <- function(dat, category) {
+  dat_json <-
+    dat |>
+    jsonlite::fromJSON()
+  
+  if (length(dat_json$issues) == 0) {
+    return(data.frame())
+  }
+  
+  items <-
+    dat_json |>
+    purrr::pluck("issues") |>
+    purrr::pluck("fields") %>%
+    purrr::keep(names(.) == "summary" |
+                  names(.) == "customfield_10037") |>
+    tibble::as_tibble() |>
+    dplyr::mutate(Category = {
+      category
+    },
+    duedate = lubridate::as_date(customfield_10037))
+  
+  status <-
+    dat_json |>
+    purrr::pluck("issues") |>
+    purrr::pluck("fields") |>
+    purrr::pluck("status")  |> 
+    purrr::pluck("statusCategory") %>%
+    purrr::keep(names(.) == "name")
+  
+  labels <-
+    dat_json |>
+    purrr::pluck("issues") |>
+    purrr::pluck("fields") |>
+    purrr::pluck("labels") |>
+    enframe() |>
+    mutate(Priority = case_when(
+      !value %in% c("Shiny", "tidyverse", "tidymodels") ~ "Other",
+      .default = as.character(value)
+    )) |>
+    select(Priority)
+  
+  urls <-
+    dat_json |>
+    purrr::pluck("issues") |>
+    purrr::pluck("key") %>%
+    enframe() |>
+    dplyr::mutate(url = paste0("https://ivelasq.atlassian.net/browse/", value)) |>
+    select(url)
+  
+  dplyr::bind_cols(items, status, labels, urls)
+  
+}
+
+social_results <- results(py$social_results, "Social")
+blog_results <- results(py$blog_results, "Blog")
+```
+
+```{r}
+all_results <-
+  dplyr::bind_rows(
+    social_results, blog_results
+  ) |> 
+  dplyr::mutate(
+    start = duedate,
+    end = duedate,
+    Status = name,
+    category = "allday",
+    title = summary,
+    calendarId = dplyr::case_when(
+      Priority == "Shiny" ~ 1,
+      Priority == "tidyverse" ~ 2,
+      Priority == "tidymodels" ~ 3),
+    body = paste0('<a href="', url, '" target="_blank">', summary, '</a>'),
+    recurrenceRule = NA,
+    location = NA,
+    backgroundColor = dplyr::case_when(
+      Priority == "Shiny" ~ "#BA0049",
+      Priority == "tidyverse" ~ "#260087",
+      Priority == "tidyverse" ~ "#1EB1B7"),
+    color = "white",
+    borderColor = "white")
+```
+
+```{r}
+#| message: false
+pins::pin_write(board = board,
+                x = all_results,
+                name = "isabella.velasquez/shiny-calendar-pin")
+```
