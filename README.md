@@ -8,6 +8,7 @@ Welcome to the GitHub repository for the project showcased in Posit's "End-to-En
 
 ![](images/shiny-calendar.png)
 
+* [Recording](https://www.youtube.com/watch?v=u2OK8IWJWhk&list=PL9HYL-VRX0oRsUB5AgNMQuKuHPpNDLBVt&index=8)
 * [Event invite](https://pos.it/team-demo) - *Happening August 28, 2024 at 11am ET*
 * [Slides](https://connect.posit.cloud/ivelasq/content/0191902f-f29f-7d83-3606-3d3a013e33d5)
     * [GitHub Repo for Slides](https://github.com/ivelasq/automated-quarto-dashboards-slides)
